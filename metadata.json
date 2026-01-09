@@ -1,0 +1,5 @@
+{
+  "name": "NexusLLM Manager",
+  "description": "A high-end LLM management suite featuring drag-and-drop prompt orchestration, multi-platform model configuration, and real-time chat testing capabilities.",
+  "requestFramePermissions": []
+}
