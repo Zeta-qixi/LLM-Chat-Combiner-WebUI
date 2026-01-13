@@ -11,8 +11,7 @@ export enum ModuleType {
 export enum ModelPartType {
   TOKEN = 'TOKEN',
   URL = 'URL',
-  MODEL_NAME = 'MODEL_NAME',
-  CONFIG = 'CONFIG'
+  MODEL_NAME = 'MODEL_NAME'
 }
 
 export interface Module {
@@ -20,6 +19,11 @@ export interface Module {
   name: string;
   type: ModuleType;
   content: string;
+}
+
+export interface HistoryConfig {
+  maxCount: number;
+  timeWindowMinutes: number;
 }
 
 export interface ModelPart {
@@ -34,6 +38,15 @@ export interface WorkspaceConfig {
   name: string;
   activeModuleIds: string[];
   activeModelParts: Record<ModelPartType, string | null>;
+  engineParams: {
+    temperature: number;
+    maxOutputTokens: number;
+    topP?: number;
+    topK?: number;
+    presencePenalty?: number;
+    frequencyPenalty?: number;
+  };
+  historyStrategy: HistoryConfig;
   slotValues: Record<string, any>;
   updatedAt: number;
 }

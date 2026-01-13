@@ -13,7 +13,6 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onUpdateModules, onUpdateModelParts }) => {
   const [activeTab, setActiveTab] = useState<'prompt' | 'model'>('prompt');
   
-  // Modal State
   const [isModuleModalOpen, setIsModuleModalOpen] = useState(false);
   const [isPartModalOpen, setIsPartModalOpen] = useState(false);
   const [editingModule, setEditingModule] = useState<Partial<Module> | null>(null);
@@ -22,7 +21,6 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
   const modelPartConfig = [
     { type: ModelPartType.TOKEN, label: '密钥 (Token)', icon: 'fa-key', color: 'text-amber-400' },
     { type: ModelPartType.MODEL_NAME, label: '模型 (Model)', icon: 'fa-microchip', color: 'text-emerald-400' },
-    { type: ModelPartType.CONFIG, label: '参数 (Config)', icon: 'fa-sliders', color: 'text-indigo-400' },
     { type: ModelPartType.URL, label: '端点 (URL)', icon: 'fa-link', color: 'text-blue-400' },
   ];
 
@@ -34,49 +32,26 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
     { type: ModuleType.CUSTOM, label: '通用', icon: 'fa-puzzle-piece' },
   ];
 
-  // --- Handlers ---
   const handleSaveModule = () => {
     if (!editingModule?.name || !editingModule?.content) return;
-    
     if (editingModule.id) {
       onUpdateModules(modules.map(m => m.id === editingModule.id ? editingModule as Module : m));
     } else {
-      const newModule: Module = {
-        ...editingModule as Module,
-        id: 'mod_' + Math.random().toString(36).substr(2, 9),
-      };
+      const newModule: Module = { ...editingModule as Module, id: 'mod_' + Date.now() };
       onUpdateModules([...modules, newModule]);
     }
     setIsModuleModalOpen(false);
   };
 
-  const handleDeleteModule = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('确定删除此提示词模块吗？')) {
-      onUpdateModules(modules.filter(m => m.id !== id));
-    }
-  };
-
   const handleSavePart = () => {
-    if (!editingPart?.name || editingPart?.value === undefined) return;
-
+    if (!editingPart?.name) return;
     if (editingPart.id) {
       onUpdateModelParts(modelParts.map(p => p.id === editingPart.id ? editingPart as ModelPart : p));
     } else {
-      const newPart: ModelPart = {
-        ...editingPart as ModelPart,
-        id: 'part_' + Math.random().toString(36).substr(2, 9),
-      };
+      const newPart: ModelPart = { ...editingPart as ModelPart, id: 'part_' + Date.now() };
       onUpdateModelParts([...modelParts, newPart]);
     }
     setIsPartModalOpen(false);
-  };
-
-  const handleDeletePart = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('确定删除此模型部件吗？')) {
-      onUpdateModelParts(modelParts.filter(p => p.id !== id));
-    }
   };
 
   return (
@@ -89,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
         <button 
           onClick={() => setActiveTab('model')}
           className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg transition-all ${activeTab === 'model' ? 'bg-slate-800 text-emerald-400 shadow-sm' : 'text-slate-500'}`}
-        >模型部件</button>
+        >模型库</button>
       </div>
 
       <div className="px-4 pb-6 space-y-6">
@@ -97,34 +72,14 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
           <div className="space-y-4">
             {moduleCategories.map(cat => (
               <div key={cat.type} className="space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                    <i className={`fas ${cat.icon}`}></i> {cat.label}
-                  </span>
-                  <button 
-                    onClick={() => { setEditingModule({ type: cat.type, name: '', content: '' }); setIsModuleModalOpen(true); }}
-                    className="text-[10px] text-blue-500 hover:text-blue-400"
-                  >
-                    <i className="fas fa-plus"></i>
-                  </button>
+                <div className="flex justify-between items-center px-1 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                  <span className="flex items-center gap-2"><i className={`fas ${cat.icon}`}></i> {cat.label}</span>
+                  <button onClick={() => { setEditingModule({ type: cat.type, name: '', content: '' }); setIsModuleModalOpen(true); }} className="text-blue-500 hover:text-blue-400"><i className="fas fa-plus"></i></button>
                 </div>
                 <div className="space-y-1.5">
                   {modules.filter(m => m.type === cat.type).map(m => (
-                    <div 
-                      key={m.id} draggable onDragStart={(e) => onDragStart(e, m.id, 'module')}
-                      onClick={() => { setEditingModule(m); setIsModuleModalOpen(true); }}
-                      className="bg-slate-800/30 border border-slate-700/50 p-2 rounded-xl cursor-grab hover:border-blue-500/30 transition-all group relative"
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-medium text-slate-200">{m.name}</span>
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => handleDeleteModule(m.id, e)} className="text-[10px] text-red-500/70 hover:text-red-400">
-                            <i className="fas fa-trash"></i>
-                          </button>
-                          <i className="fas fa-grip-vertical text-[10px] text-slate-700"></i>
-                        </div>
-                      </div>
-                      <div className="text-[9px] text-slate-500 mt-1 line-clamp-1">{m.content}</div>
+                    <div key={m.id} draggable onDragStart={(e) => onDragStart(e, m.id, 'module')} onClick={() => { setEditingModule(m); setIsModuleModalOpen(true); }} className="bg-slate-800/30 border border-slate-700/50 p-2 rounded-xl cursor-grab hover:border-blue-500/30 group relative">
+                      <div className="flex justify-between items-center"><span className="text-xs font-medium text-slate-200">{m.name}</span><i className="fas fa-grip-vertical text-[10px] text-slate-700 opacity-0 group-hover:opacity-100"></i></div>
                     </div>
                   ))}
                 </div>
@@ -135,31 +90,15 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
           <div className="space-y-4">
             {modelPartConfig.map(cat => (
               <div key={cat.type} className="space-y-2">
-                <div className="flex justify-between items-center px-1">
-                  <span className={`text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 ${cat.color}`}>
-                    <i className={`fas ${cat.icon}`}></i> {cat.label}
-                  </span>
-                  <button 
-                    onClick={() => { setEditingPart({ type: cat.type, name: '', value: cat.type === ModelPartType.CONFIG ? {} : '' }); setIsPartModalOpen(true); }}
-                    className="text-[10px] text-emerald-500 hover:text-emerald-400"
-                  >
-                    <i className="fas fa-plus"></i>
-                  </button>
+                <div className="flex justify-between items-center px-1 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
+                  <span className={`flex items-center gap-2 ${cat.color}`}><i className={`fas ${cat.icon}`}></i> {cat.label}</span>
+                  <button onClick={() => { setEditingPart({ type: cat.type, name: '', value: '' }); setIsPartModalOpen(true); }} className="text-emerald-500 hover:text-emerald-400"><i className="fas fa-plus"></i></button>
                 </div>
                 <div className="space-y-1.5">
                   {modelParts.filter(p => p.type === cat.type).map(p => (
-                    <div 
-                      key={p.id} draggable onDragStart={(e) => onDragStart(e, p.id, 'modelPart')}
-                      onClick={() => { setEditingPart(p); setIsPartModalOpen(true); }}
-                      className="bg-slate-800/30 border border-slate-700/50 p-2 rounded-xl cursor-grab hover:border-emerald-500/30 transition-all flex justify-between items-center group"
-                    >
+                    <div key={p.id} draggable onDragStart={(e) => onDragStart(e, p.id, 'modelPart')} onClick={() => { setEditingPart(p); setIsPartModalOpen(true); }} className="bg-slate-800/30 border border-slate-700/50 p-2 rounded-xl cursor-grab hover:border-emerald-500/30 flex justify-between items-center group">
                       <span className="text-xs font-medium text-slate-200">{p.name}</span>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => handleDeletePart(p.id, e)} className="text-[10px] text-red-500/70 hover:text-red-400">
-                          <i className="fas fa-trash"></i>
-                        </button>
-                        <i className="fas fa-grip-vertical text-[10px] text-slate-700"></i>
-                      </div>
+                      <i className="fas fa-grip-vertical text-[10px] text-slate-700 opacity-0 group-hover:opacity-100"></i>
                     </div>
                   ))}
                 </div>
@@ -169,47 +108,16 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
         )}
       </div>
 
-      {/* --- Modals --- */}
       {isModuleModalOpen && editingModule && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="glass w-full max-w-md rounded-2xl p-6 space-y-4 border-slate-700">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-              <i className="fas fa-puzzle-piece text-blue-400"></i>
-              {editingModule.id ? '编辑提示词模块' : '新增提示词模块'}
-            </h3>
+            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2"><i className="fas fa-puzzle-piece text-blue-400"></i>编辑模块</h3>
             <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">模块名称</label>
-                <input 
-                  type="text" 
-                  value={editingModule.name}
-                  onChange={e => setEditingModule({...editingModule, name: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:border-blue-500 outline-none"
-                  placeholder="例如：专业翻译"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">模块分类</label>
-                <select 
-                  value={editingModule.type}
-                  onChange={e => setEditingModule({...editingModule, type: e.target.value as ModuleType})}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:border-blue-500 outline-none"
-                >
-                  {moduleCategories.map(c => <option key={c.type} value={c.type}>{c.label}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">提示词内容 (支持 {'{{slot}}'})</label>
-                <textarea 
-                  value={editingModule.content}
-                  onChange={e => setEditingModule({...editingModule, content: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:border-blue-500 outline-none h-32 resize-none"
-                  placeholder="输入 Prompt 模板内容..."
-                />
-              </div>
+              <input type="text" value={editingModule.name} onChange={e => setEditingModule({...editingModule, name: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none" placeholder="模块名称"/>
+              <textarea value={editingModule.content} onChange={e => setEditingModule({...editingModule, content: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 h-32 resize-none outline-none" placeholder="Prompt 内容..."/>
             </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <button onClick={() => setIsModuleModalOpen(false)} className="px-4 py-2 text-[10px] font-bold text-slate-400 hover:text-white uppercase">取消</button>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setIsModuleModalOpen(false)} className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">取消</button>
               <button onClick={handleSaveModule} className="px-4 py-2 text-[10px] font-bold bg-blue-600 rounded-lg hover:bg-blue-500 uppercase">保存</button>
             </div>
           </div>
@@ -219,50 +127,13 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
       {isPartModalOpen && editingPart && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="glass w-full max-w-md rounded-2xl p-6 space-y-4 border-slate-700">
-            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-              <i className="fas fa-microchip text-emerald-400"></i>
-              {editingPart.id ? '编辑模型部件' : '新增模型部件'}
-            </h3>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">部件名称</label>
-                <input 
-                  type="text" 
-                  value={editingPart.name}
-                  onChange={e => setEditingPart({...editingPart, name: e.target.value})}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:border-emerald-500 outline-none"
-                  placeholder="例如：Gemini 2.5 Flash"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">部件值 / 配置 (JSON)</label>
-                {editingPart.type === ModelPartType.CONFIG ? (
-                  <textarea 
-                    value={JSON.stringify(editingPart.value, null, 2)}
-                    onChange={e => {
-                      try {
-                        const parsed = JSON.parse(e.target.value);
-                        setEditingPart({...editingPart, value: parsed});
-                      } catch {
-                        // Just let user type
-                      }
-                    }}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs font-mono text-emerald-400 focus:border-emerald-500 outline-none h-32 resize-none"
-                    placeholder='{"temperature": 0.7}'
-                  />
-                ) : (
-                  <input 
-                    type="text" 
-                    value={editingPart.value}
-                    onChange={e => setEditingPart({...editingPart, value: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:border-emerald-500 outline-none"
-                    placeholder="输入值..."
-                  />
-                )}
-              </div>
+            <h3 className="text-sm font-bold text-slate-200 flex items-center gap-2"><i className="fas fa-microchip text-emerald-400"></i>配置部件</h3>
+            <div className="space-y-4">
+              <input type="text" value={editingPart.name} onChange={e => setEditingPart({...editingPart, name: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none" placeholder="部件名称"/>
+              <input type="text" value={editingPart.value} onChange={e => setEditingPart({...editingPart, value: e.target.value})} className="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 outline-none" placeholder="输入值 (Token / Model Name / URL)"/>
             </div>
-            <div className="flex gap-2 justify-end pt-2">
-              <button onClick={() => setIsPartModalOpen(false)} className="px-4 py-2 text-[10px] font-bold text-slate-400 hover:text-white uppercase">取消</button>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setIsPartModalOpen(false)} className="px-4 py-2 text-[10px] font-bold text-slate-400 uppercase">取消</button>
               <button onClick={handleSavePart} className="px-4 py-2 text-[10px] font-bold bg-emerald-600 rounded-lg hover:bg-emerald-500 uppercase">保存</button>
             </div>
           </div>

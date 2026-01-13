@@ -1,7 +1,6 @@
 
 import { Module, ModelPart, WorkspaceConfig, ModuleType, ModelPartType } from '../types';
 
-// Mock Initial Data
 const DEFAULT_MODULES: Module[] = [
   { id: 'p1', name: '资深专家', type: ModuleType.ROLE, content: '你是一位拥有20年经验的{{领域}}高级工程师。' },
   { id: 'p2', name: '总结达人', type: ModuleType.TASK, content: '请将以下文本总结为{{数量}}个要点。' },
@@ -9,8 +8,8 @@ const DEFAULT_MODULES: Module[] = [
 
 const DEFAULT_PARTS: ModelPart[] = [
   { id: 'tk1', name: '默认密钥', type: ModelPartType.TOKEN, value: 'sk-...' },
-  { id: 'mn1', name: 'Gemini 3 Flash', type: ModelPartType.MODEL_NAME, value: 'gemini-3-flash-preview' },
-  { id: 'cfg1', name: '平衡配置', type: ModelPartType.CONFIG, value: { temperature: 0.7, maxTokens: 2048 } },
+  { id: 'mn1', name: 'Gemini 3 Flash', type: ModelPartType.MODEL_NAME, value: 'gemini-3-flash-latest' },
+  { id: 'mn2', name: 'Gemini 3 Pro', type: ModelPartType.MODEL_NAME, value: 'gemini-3-pro-preview' },
 ];
 
 const STORAGE_KEYS = {
@@ -21,32 +20,35 @@ const STORAGE_KEYS = {
 
 const get = <T>(key: string, defaultValue: T): T => {
   const data = localStorage.getItem(key);
-  return data ? JSON.parse(data) : defaultValue;
+  try {
+    return data ? JSON.parse(data) : defaultValue;
+  } catch {
+    return defaultValue;
+  }
 };
 
 const set = <T>(key: string, value: T) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
-// Simulated Async API calls
 export const db = {
   modules: {
     list: async (): Promise<Module[]> => {
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 200));
       return get(STORAGE_KEYS.MODULES, DEFAULT_MODULES);
     },
     save: async (modules: Module[]) => set(STORAGE_KEYS.MODULES, modules),
   },
   parts: {
     list: async (): Promise<ModelPart[]> => {
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 200));
       return get(STORAGE_KEYS.PARTS, DEFAULT_PARTS);
     },
     save: async (parts: ModelPart[]) => set(STORAGE_KEYS.PARTS, parts),
   },
   workspaceConfigs: {
     list: async (): Promise<WorkspaceConfig[]> => {
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise(r => setTimeout(r, 300));
       return get(STORAGE_KEYS.CONFIGS, []);
     },
     save: async (config: WorkspaceConfig) => {

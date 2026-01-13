@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Module, ModelPart, ModelPartType, ChatMessage, WorkspaceConfig } from './types';
+import { Module, ModelPart, ModelPartType, ChatMessage, WorkspaceConfig, HistoryConfig } from './types';
 import Sidebar from './components/Sidebar';
 import PromptBuilder from './components/PromptBuilder';
 import ChatWindow from './components/ChatWindow';
@@ -20,17 +20,29 @@ const App: React.FC = () => {
     [ModelPartType.TOKEN]: null,
     [ModelPartType.URL]: null,
     [ModelPartType.MODEL_NAME]: null,
-    [ModelPartType.CONFIG]: null,
   });
-  const [slotValues, setSlotValues] = useState<Record<string, any>>({});
   
+  const [engineParams, setEngineParams] = useState({
+    temperature: 0.7,
+    maxOutputTokens: 2048,
+    topP: 0.95,
+    topK: 40,
+    presencePenalty: 0.0,
+    frequencyPenalty: 0.0
+  });
+
+  const [historyStrategy, setHistoryStrategy] = useState<HistoryConfig>({
+    maxCount: 10,
+    timeWindowMinutes: 0
+  });
+
+  const [slotValues, setSlotValues] = useState<Record<string, any>>({});
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
-  // --- Initial Load ---
   useEffect(() => {
     const init = async () => {
       const [m, p, c] = await Promise.all([db.modules.list(), db.parts.list(), db.workspaceConfigs.list()]);
@@ -43,7 +55,6 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  // --- Persistence Wrappers ---
   const updateModules = async (m: Module[]) => {
     setModules(m);
     await db.modules.save(m);
@@ -64,6 +75,8 @@ const App: React.FC = () => {
       name: finalName,
       activeModuleIds,
       activeModelParts,
+      engineParams,
+      historyStrategy,
       slotValues,
       updatedAt: Date.now()
     };
@@ -83,6 +96,15 @@ const App: React.FC = () => {
     setWorkspaceName(config.name);
     setActiveModuleIds(config.activeModuleIds);
     setActiveModelParts(config.activeModelParts);
+    setEngineParams(config.engineParams || { 
+      temperature: 0.7, 
+      maxOutputTokens: 2048, 
+      topP: 0.95, 
+      topK: 40,
+      presencePenalty: 0.0,
+      frequencyPenalty: 0.0
+    });
+    setHistoryStrategy(config.historyStrategy || { maxCount: 10, timeWindowMinutes: 0 });
     setSlotValues(config.slotValues);
     setIsConfigModalOpen(false);
   };
@@ -90,20 +112,25 @@ const App: React.FC = () => {
   const deleteConfig = async (id: string) => {
     await db.workspaceConfigs.delete(id);
     setConfigs(await db.workspaceConfigs.list());
-    if (currentConfigId === id) {
-      setCurrentConfigId(null);
-      setWorkspaceName(`Workspace #${configs.length}`);
-    }
+    if (currentConfigId === id) setCurrentConfigId(null);
   };
 
   const handleReset = () => {
     setActiveModuleIds([]);
     setSlotValues({});
     setCurrentConfigId(null);
-    setWorkspaceName(`Workspace #${configs.length + 1}`);
+    setChatMessages([]);
+    setEngineParams({ 
+      temperature: 0.7, 
+      maxOutputTokens: 2048, 
+      topP: 0.95, 
+      topK: 40,
+      presencePenalty: 0.0,
+      frequencyPenalty: 0.0
+    });
+    setHistoryStrategy({ maxCount: 10, timeWindowMinutes: 0 });
   };
 
-  // --- Logic Helpers ---
   const onDragStart = (e: React.DragEvent, id: string, type: 'module' | 'modelPart') => {
     e.dataTransfer.setData('itemId', id);
     e.dataTransfer.setData('itemType', type);
@@ -152,25 +179,46 @@ const App: React.FC = () => {
     activeModules.map(m => resolveContent(m)).join('\n\n')
   , [activeModules, resolveContent]);
 
-  const engineConfig = useMemo(() => {
-    const getPart = (type: ModelPartType) => modelParts.find(p => p.id === activeModelParts[type]);
-    return {
-      model: getPart(ModelPartType.MODEL_NAME)?.value || '未设置',
-      config: getPart(ModelPartType.CONFIG)?.value || {}
-    };
+  const activeModel = useMemo(() => {
+    const part = modelParts.find(p => p.id === activeModelParts[ModelPartType.MODEL_NAME]);
+    return part?.value || 'gemini-3-flash-preview';
   }, [modelParts, activeModelParts]);
 
   const handleSendMessage = async (userInput: string) => {
     if (!userInput.trim() || isProcessing) return;
     setIsProcessing(true);
-    setChatMessages(prev => [...prev, { role: 'user', content: userInput, timestamp: Date.now() }]);
+    const newUserMsg: ChatMessage = { role: 'user', content: userInput, timestamp: Date.now() };
+    const currentHistory = [...chatMessages, newUserMsg];
+    setChatMessages(currentHistory);
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      
+      let contextMessages = [...chatMessages];
+      const { maxCount, timeWindowMinutes } = historyStrategy;
+      const now = Date.now();
+      if (timeWindowMinutes > 0) {
+        contextMessages = contextMessages.filter(m => (now - m.timestamp) < (timeWindowMinutes * 60000));
+      }
+      if (maxCount > 0) {
+        contextMessages = contextMessages.slice(-maxCount);
+      }
+
+      const contents = contextMessages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : m.role,
+        parts: [{ text: m.content }]
+      }));
+      contents.push({ role: 'user', parts: [{ text: userInput }] });
+
       const response = await ai.models.generateContent({
-        model: engineConfig.model as string,
-        contents: userInput,
-        config: { systemInstruction: resolvedSystemPrompt || undefined, ...engineConfig.config }
+        model: activeModel,
+        contents: contents as any,
+        config: { 
+          systemInstruction: resolvedSystemPrompt || undefined, 
+          ...engineParams 
+        }
       });
+
       setChatMessages(prev => [...prev, { role: 'assistant', content: response.text || 'Empty response', timestamp: Date.now() }]);
     } catch (error: any) {
       setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}`, timestamp: Date.now() }]);
@@ -190,7 +238,6 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-slate-950">
-      {/* Sidebar */}
       <div className="w-80 flex-shrink-0 flex flex-col border-r border-slate-800 bg-slate-900/50">
         <div className="p-6 border-b border-slate-800 bg-slate-900/80">
           <h1 className="text-xl font-bold text-blue-400 flex items-center gap-2">
@@ -209,7 +256,6 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Workbench */}
       <div className="flex-1 flex flex-col bg-slate-950 p-6 space-y-6 overflow-y-auto scrollbar-hide">
         <div className="flex justify-between items-center bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50">
           <div className="flex items-center gap-4 flex-1">
@@ -260,6 +306,10 @@ const App: React.FC = () => {
           availableModules={modules}
           activeModelParts={activeModelParts}
           modelPartsLibrary={modelParts}
+          engineParams={engineParams}
+          onUpdateParams={setEngineParams}
+          historyStrategy={historyStrategy}
+          onUpdateHistory={setHistoryStrategy}
           slotValues={slotValues}
           onUpdateSlot={(ownerId, name, val) => setSlotValues(v => ({ ...v, [`${ownerId}_${name}`]: val }))}
           onDrop={onDropToBuilder}
@@ -276,25 +326,29 @@ const App: React.FC = () => {
         <div className="mt-auto glass rounded-2xl overflow-hidden border-blue-500/20 shadow-2xl">
           <div className="bg-slate-900/80 px-4 py-2 border-b border-slate-800 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">最终生成请求 (Resolved JSON)</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">最终生成请求预览 (Request Preview)</span>
           </div>
           <div className="p-4 max-h-[150px] overflow-y-auto font-mono text-[11px] text-emerald-400/90 bg-slate-950">
-            <pre>{JSON.stringify({ ...engineConfig, system: resolvedSystemPrompt }, null, 2)}</pre>
+            <pre>{JSON.stringify({ 
+              model: activeModel,
+              params: engineParams,
+              history: historyStrategy,
+              system: resolvedSystemPrompt,
+              historyMessagesIncluded: Math.min(chatMessages.length, historyStrategy.maxCount)
+            }, null, 2)}</pre>
           </div>
         </div>
       </div>
 
-      {/* Chat Terminal */}
       <div className="w-[400px] flex-shrink-0 border-l border-slate-800 bg-slate-900/30">
         <ChatWindow 
           messages={chatMessages} 
           onSend={handleSendMessage} 
           isProcessing={isProcessing}
-          ready={!!engineConfig.model && activeModelParts[ModelPartType.TOKEN] !== null}
+          ready={!!activeModel && activeModelParts[ModelPartType.TOKEN] !== null}
         />
       </div>
 
-      {/* Config Library Modal */}
       {isConfigModalOpen && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="glass w-full max-w-lg rounded-2xl p-6 space-y-4 border-slate-700">

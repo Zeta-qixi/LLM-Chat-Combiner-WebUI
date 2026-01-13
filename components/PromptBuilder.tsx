@@ -1,12 +1,23 @@
 
-import React from 'react';
-import { Module, ModuleType, ModelPart, ModelPartType } from '../types';
+import React, { useState } from 'react';
+import { Module, ModelPart, ModelPartType, HistoryConfig } from '../types';
 
 interface BuilderProps {
   activeModules: Module[];
   availableModules: Module[];
   activeModelParts: Record<ModelPartType, string | null>;
   modelPartsLibrary: ModelPart[];
+  engineParams: { 
+    temperature: number; 
+    maxOutputTokens: number; 
+    topP?: number; 
+    topK?: number;
+    presencePenalty?: number;
+    frequencyPenalty?: number;
+  };
+  onUpdateParams: (p: any) => void;
+  historyStrategy: HistoryConfig;
+  onUpdateHistory: (h: HistoryConfig) => void;
   slotValues: Record<string, any>;
   onUpdateSlot: (ownerId: string, name: string, val: any) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -17,8 +28,11 @@ interface BuilderProps {
 
 const PromptBuilder: React.FC<BuilderProps> = ({ 
   activeModules, availableModules, activeModelParts, modelPartsLibrary, 
+  engineParams, onUpdateParams, historyStrategy, onUpdateHistory,
   slotValues, onUpdateSlot, onDrop, onRemoveModule, onRemoveModelPart, onMoveModule 
 }) => {
+  const [showConfigPanel, setShowConfigPanel] = useState(false);
+
   const getSlots = (text: string) => text.match(/{{(.*?)}}/g)?.map(m => m.slice(2, -2)) || [];
 
   const renderModelSlot = (type: ModelPartType, label: string, icon: string, color: string) => {
@@ -27,13 +41,13 @@ const PromptBuilder: React.FC<BuilderProps> = ({
     
     return (
       <div className={`flex-1 glass p-3 rounded-2xl border-2 border-dashed transition-all flex items-center gap-3 min-w-[150px]
-        ${part ? 'bg-slate-900 border-emerald-500/50' : 'bg-slate-900/40 border-slate-800'}`}>
+        ${part ? 'bg-slate-900 border-emerald-500/50 shadow-[0_0_10px_-5px_rgba(16,185,129,0.3)]' : 'bg-slate-900/40 border-slate-800'}`}>
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-slate-950 ${color}`}>
           <i className={`fas ${icon}`}></i>
         </div>
         <div className="flex-1 overflow-hidden">
           <div className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{label}</div>
-          <div className="text-[10px] font-bold text-slate-200 truncate">{part ? part.name : '等待拖入...'}</div>
+          <div className="text-[10px] font-bold text-slate-200 truncate">{part ? part.name : '拖入库项...'}</div>
         </div>
         {part && (
           <button onClick={() => onRemoveModelPart(type)} className="text-slate-600 hover:text-red-400 p-1">
@@ -44,20 +58,94 @@ const PromptBuilder: React.FC<BuilderProps> = ({
     );
   };
 
+  const renderSlider = (label: string, value: number | undefined, min: number, max: number, step: number, field: string) => (
+    <div className="space-y-1">
+      <div className="flex justify-between items-center">
+        <label className="text-[8px] font-bold text-slate-500 uppercase">{label}</label>
+        <span className="text-[9px] font-mono text-indigo-400">{value?.toFixed(field.includes('Penalty') ? 2 : (step < 1 ? 2 : 0))}</span>
+      </div>
+      <input 
+        type="range" min={min} max={max} step={step} 
+        value={value ?? 0} 
+        onChange={e => onUpdateParams({...engineParams, [field]: parseFloat(e.target.value)})}
+        className="w-full accent-indigo-500 h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer"
+      />
+    </div>
+  );
+
   return (
     <div onDragOver={e => e.preventDefault()} onDrop={onDrop} className="space-y-6">
-      {/* Engine Orchestrator Slot Bar */}
       <div className="space-y-2">
-        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">引擎配置引擎 (Engine Config)</label>
+        <div className="flex justify-between items-center px-1">
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">引擎配置 (Engine Configuration)</label>
+          <button 
+            onClick={() => setShowConfigPanel(!showConfigPanel)}
+            className={`text-[10px] font-bold px-3 py-1 rounded-lg border transition-all ${showConfigPanel ? 'bg-indigo-600 text-white border-indigo-500 shadow-lg shadow-indigo-500/20' : 'text-slate-500 border-slate-800 hover:border-slate-600'}`}
+          >
+            <i className={`fas ${showConfigPanel ? 'fa-chevron-up' : 'fa-sliders-h'} mr-2`}></i> 微调参数
+          </button>
+        </div>
+        
         <div className="flex flex-wrap gap-3">
           {renderModelSlot(ModelPartType.TOKEN, 'API Key', 'fa-key', 'text-amber-500')}
-          {renderModelSlot(ModelPartType.MODEL_NAME, 'Engine', 'fa-microchip', 'text-emerald-500')}
-          {renderModelSlot(ModelPartType.CONFIG, 'Hyperparams', 'fa-sliders', 'text-indigo-500')}
-          {renderModelSlot(ModelPartType.URL, 'Endpoint', 'fa-link', 'text-blue-500')}
+          {renderModelSlot(ModelPartType.MODEL_NAME, 'Engine / Model', 'fa-microchip', 'text-emerald-500')}
+          {renderModelSlot(ModelPartType.URL, 'Base URL', 'fa-link', 'text-blue-500')}
         </div>
+
+        {showConfigPanel && (
+          <div className="bg-slate-900/60 p-5 rounded-2xl border border-indigo-500/20 animate-in fade-in slide-in-from-top-2 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Core Sampling */}
+              <div className="space-y-4">
+                <h5 className="text-[9px] font-black text-slate-600 uppercase border-b border-slate-800 pb-1">核心采样 (Sampling)</h5>
+                {renderSlider('Temperature', engineParams.temperature, 0, 2, 0.1, 'temperature')}
+                {renderSlider('Top P', engineParams.topP, 0, 1, 0.01, 'topP')}
+                {renderSlider('Top K', engineParams.topK, 1, 100, 1, 'topK')}
+              </div>
+
+              {/* Penalty & Length */}
+              <div className="space-y-4">
+                <h5 className="text-[9px] font-black text-slate-600 uppercase border-b border-slate-800 pb-1">惩罚与长度 (Penalties)</h5>
+                {renderSlider('Presence Penalty', engineParams.presencePenalty, -2, 2, 0.01, 'presencePenalty')}
+                {renderSlider('Frequency Penalty', engineParams.frequencyPenalty, -2, 2, 0.01, 'frequencyPenalty')}
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-500 uppercase">Max Output Tokens</label>
+                  <input 
+                    type="number" 
+                    value={engineParams.maxOutputTokens}
+                    onChange={e => onUpdateParams({...engineParams, maxOutputTokens: parseInt(e.target.value) || 0})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-[10px] text-indigo-300 font-mono focus:border-indigo-500/50 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Context & History */}
+              <div className="space-y-4">
+                <h5 className="text-[9px] font-black text-slate-600 uppercase border-b border-slate-800 pb-1">上下文策略 (Context)</h5>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-500 uppercase">历史消息数量 (History Count)</label>
+                  <input 
+                    type="number" 
+                    value={historyStrategy.maxCount}
+                    onChange={e => onUpdateHistory({...historyStrategy, maxCount: parseInt(e.target.value) || 0})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-[10px] text-rose-400 font-mono focus:border-rose-500/50 outline-none"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-bold text-slate-500 uppercase">时间窗口 (Time Window, Min)</label>
+                  <input 
+                    type="number" 
+                    value={historyStrategy.timeWindowMinutes}
+                    onChange={e => onUpdateHistory({...historyStrategy, timeWindowMinutes: parseInt(e.target.value) || 0})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-[10px] text-rose-400 font-mono focus:border-rose-500/50 outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Pipeline Zone */}
       <div className="space-y-2">
         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">提示词管道 (Prompt Pipeline)</label>
         <div className={`min-h-[300px] border-2 border-dashed border-slate-800/50 rounded-3xl p-6 flex flex-wrap content-start gap-4 bg-slate-900/20
@@ -87,8 +175,6 @@ const PromptBuilder: React.FC<BuilderProps> = ({
                   </div>
                 </div>
 
-                {isInvalid && <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black text-[8px] font-bold px-1 py-0.5 rounded animate-pulse">待填充</div>}
-
                 <div className="space-y-3 mt-4 border-t border-slate-800/50 pt-3">
                   {slots.map(s => {
                     const key = `${m.id}_${s}`;
@@ -100,8 +186,8 @@ const PromptBuilder: React.FC<BuilderProps> = ({
                         <div className="flex justify-between items-center text-[9px] text-slate-500 uppercase font-bold">
                           <span>{s}</span>
                           <div className="flex gap-1 bg-slate-950 p-0.5 rounded">
-                            <button onClick={() => onUpdateSlot(m.id, s, '')} className={`px-1 rounded ${!isLink ? 'bg-slate-800 text-white' : ''}`}>T</button>
-                            <button onClick={() => onUpdateSlot(m.id, s, {moduleId: ''})} className={`px-1 rounded ${isLink ? 'bg-blue-600 text-white' : ''}`}>M</button>
+                            <button onClick={() => onUpdateSlot(m.id, s, '')} title="Text Input" className={`px-1 rounded ${!isLink ? 'bg-slate-800 text-white' : ''}`}>T</button>
+                            <button onClick={() => onUpdateSlot(m.id, s, {moduleId: ''})} title="Module Link" className={`px-1 rounded ${isLink ? 'bg-blue-600 text-white' : ''}`}>M</button>
                           </div>
                         </div>
                         {isLink ? (
