@@ -6,11 +6,17 @@ interface SidebarProps {
   modules: Module[];
   modelParts: ModelPart[];
   onDragStart: (e: React.DragEvent, id: string, type: 'module' | 'modelPart') => void;
-  onUpdateModules: (m: Module[]) => void;
-  onUpdateModelParts: (p: ModelPart[]) => void;
+  onSaveModule: (m: Module) => Promise<void>;
+  onDeleteModule: (id: string) => Promise<void>;
+  onSavePart: (p: ModelPart) => Promise<void>;
+  onDeletePart: (id: string) => Promise<void>;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onUpdateModules, onUpdateModelParts }) => {
+const Sidebar: React.FC<SidebarProps> = ({ 
+  modules, modelParts, onDragStart, 
+  onSaveModule, onDeleteModule, 
+  onSavePart, onDeletePart 
+}) => {
   const [activeTab, setActiveTab] = useState<'prompt' | 'model'>('prompt');
   
   const [isModuleModalOpen, setIsModuleModalOpen] = useState(false);
@@ -32,25 +38,23 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
     { type: ModuleType.CUSTOM, label: '通用', icon: 'fa-puzzle-piece' },
   ];
 
-  const handleSaveModule = () => {
+  const handleSaveModule = async () => {
     if (!editingModule?.name || !editingModule?.content) return;
-    if (editingModule.id) {
-      onUpdateModules(modules.map(m => m.id === editingModule.id ? editingModule as Module : m));
-    } else {
-      const newModule: Module = { ...editingModule as Module, id: 'mod_' + Date.now() };
-      onUpdateModules([...modules, newModule]);
-    }
+    const finalModule = editingModule.id 
+      ? editingModule as Module 
+      : { ...editingModule, id: 'mod_' + Date.now() } as Module;
+    
+    await onSaveModule(finalModule);
     setIsModuleModalOpen(false);
   };
 
-  const handleSavePart = () => {
+  const handleSavePart = async () => {
     if (!editingPart?.name) return;
-    if (editingPart.id) {
-      onUpdateModelParts(modelParts.map(p => p.id === editingPart.id ? editingPart as ModelPart : p));
-    } else {
-      const newPart: ModelPart = { ...editingPart as ModelPart, id: 'part_' + Date.now() };
-      onUpdateModelParts([...modelParts, newPart]);
-    }
+    const finalPart = editingPart.id 
+      ? editingPart as ModelPart 
+      : { ...editingPart, id: 'part_' + Date.now() } as ModelPart;
+    
+    await onSavePart(finalPart);
     setIsPartModalOpen(false);
   };
 
@@ -74,12 +78,18 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
               <div key={cat.type} className="space-y-2">
                 <div className="flex justify-between items-center px-1 text-[9px] font-bold text-slate-500 uppercase tracking-widest">
                   <span className="flex items-center gap-2"><i className={`fas ${cat.icon}`}></i> {cat.label}</span>
-                  <button onClick={() => { setEditingModule({ type: cat.type, name: '', content: '' }); setIsModuleModalOpen(true); }} className="text-blue-500 hover:text-blue-400"><i className="fas fa-plus"></i></button>
+                  <button onClick={() => { setEditingModule({ type: cat.type as ModuleType, name: '', content: '' }); setIsModuleModalOpen(true); }} className="text-blue-500 hover:text-blue-400"><i className="fas fa-plus"></i></button>
                 </div>
                 <div className="space-y-1.5">
                   {modules.filter(m => m.type === cat.type).map(m => (
                     <div key={m.id} draggable onDragStart={(e) => onDragStart(e, m.id, 'module')} onClick={() => { setEditingModule(m); setIsModuleModalOpen(true); }} className="bg-slate-800/30 border border-slate-700/50 p-2 rounded-xl cursor-grab hover:border-blue-500/30 group relative">
-                      <div className="flex justify-between items-center"><span className="text-xs font-medium text-slate-200">{m.name}</span><i className="fas fa-grip-vertical text-[10px] text-slate-700 opacity-0 group-hover:opacity-100"></i></div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-medium text-slate-200">{m.name}</span>
+                        <div className="flex items-center gap-2">
+                          <button onClick={(e) => { e.stopPropagation(); onDeleteModule(m.id); }} className="text-slate-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-trash text-[10px]"></i></button>
+                          <i className="fas fa-grip-vertical text-[10px] text-slate-700 opacity-0 group-hover:opacity-100"></i>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -98,7 +108,10 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, modelParts, onDragStart, onU
                   {modelParts.filter(p => p.type === cat.type).map(p => (
                     <div key={p.id} draggable onDragStart={(e) => onDragStart(e, p.id, 'modelPart')} onClick={() => { setEditingPart(p); setIsPartModalOpen(true); }} className="bg-slate-800/30 border border-slate-700/50 p-2 rounded-xl cursor-grab hover:border-emerald-500/30 flex justify-between items-center group">
                       <span className="text-xs font-medium text-slate-200">{p.name}</span>
-                      <i className="fas fa-grip-vertical text-[10px] text-slate-700 opacity-0 group-hover:opacity-100"></i>
+                      <div className="flex items-center gap-2">
+                        <button onClick={(e) => { e.stopPropagation(); onDeletePart(p.id); }} className="text-slate-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><i className="fas fa-trash text-[10px]"></i></button>
+                        <i className="fas fa-grip-vertical text-[10px] text-slate-700 opacity-0 group-hover:opacity-100"></i>
+                      </div>
                     </div>
                   ))}
                 </div>

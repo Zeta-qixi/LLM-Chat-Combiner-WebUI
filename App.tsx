@@ -43,6 +43,7 @@ const App: React.FC = () => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
+  
   useEffect(() => {
     const init = async () => {
       const [m, p, c] = await Promise.all([db.modules.list(), db.parts.list(), db.workspaceConfigs.list()]);
@@ -55,14 +56,41 @@ const App: React.FC = () => {
     init();
   }, []);
 
-  const updateModules = async (m: Module[]) => {
-    setModules(m);
-    await db.modules.save(m);
+  const onSaveModule = async (module: Module) => {
+    const result = await db.modules.save(module);
+    if (result.id) {
+      const updated = await db.modules.list();
+      setModules(updated);
+    }
   };
 
-  const updateParts = async (p: ModelPart[]) => {
-    setModelParts(p);
-    await db.parts.save(p);
+  const onDeleteModule = async (id: string) => {
+    await db.modules.delete(id);
+    const updated = await db.modules.list();
+    setModules(updated);
+    if (activeModuleIds.includes(id)) {
+      setActiveModuleIds(prev => prev.filter(mid => mid !== id));
+    }
+  };
+
+  const onSavePart = async (part: ModelPart) => {
+    const result = await db.parts.save(part);
+    if (result.id) {
+      const updated = await db.parts.list();
+      setModelParts(updated);
+    }
+  };
+
+  const onDeletePart = async (id: string) => {
+    await db.parts.delete(id);
+    const updated = await db.parts.list();
+    setModelParts(updated);
+    // Remove from active if deleted
+    Object.entries(activeModelParts).forEach(([type, activeId]) => {
+      if (activeId === id) {
+        setActiveModelParts(prev => ({ ...prev, [type]: null }));
+      }
+    });
   };
 
   const handleSaveWorkspace = async (isNew: boolean = false) => {
@@ -91,18 +119,22 @@ const App: React.FC = () => {
     setTimeout(() => setSaveStatus('idle'), 2000);
   };
 
+
+
   const loadConfig = (config: WorkspaceConfig) => {
     setCurrentConfigId(config.id);
     setWorkspaceName(config.name);
     setActiveModuleIds(config.activeModuleIds);
     setActiveModelParts(config.activeModelParts);
-    setEngineParams(config.engineParams || { 
+    // Fixed: spread defaults to ensure optional WorkspaceConfig properties don't cause type mismatch with required state properties
+    setEngineParams({ 
       temperature: 0.7, 
       maxOutputTokens: 2048, 
       topP: 0.95, 
       topK: 40,
       presencePenalty: 0.0,
-      frequencyPenalty: 0.0
+      frequencyPenalty: 0.0,
+      ...(config.engineParams || {})
     });
     setHistoryStrategy(config.historyStrategy || { maxCount: 10, timeWindowMinutes: 0 });
     setSlotValues(config.slotValues);
@@ -116,6 +148,7 @@ const App: React.FC = () => {
   };
 
   const handleReset = () => {
+    setWorkspaceName(`Workspace #${configs.length + 1}`);
     setActiveModuleIds([]);
     setSlotValues({});
     setCurrentConfigId(null);
@@ -181,7 +214,7 @@ const App: React.FC = () => {
 
   const activeModel = useMemo(() => {
     const part = modelParts.find(p => p.id === activeModelParts[ModelPartType.MODEL_NAME]);
-    return part?.value || 'gemini-3-flash-preview';
+    return part?.value || 'gemini-3-flash-latest';
   }, [modelParts, activeModelParts]);
 
   const handleSendMessage = async (userInput: string) => {
@@ -191,33 +224,27 @@ const App: React.FC = () => {
     const currentHistory = [...chatMessages, newUserMsg];
     setChatMessages(currentHistory);
 
+    const requestData = { 
+      token: modelParts.find(p => p.id === activeModelParts[ModelPartType.TOKEN])?.value || '',
+      url: modelParts.find(p => p.id === activeModelParts[ModelPartType.URL])?.value || '',
+      model: activeModel,
+      params: engineParams,
+      history: historyStrategy,
+      system: resolvedSystemPrompt,
+      historyMessagesIncluded: Math.min(chatMessages.length, historyStrategy.maxCount)
+    };
+
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-      
-      let contextMessages = [...chatMessages];
-      const { maxCount, timeWindowMinutes } = historyStrategy;
-      const now = Date.now();
-      if (timeWindowMinutes > 0) {
-        contextMessages = contextMessages.filter(m => (now - m.timestamp) < (timeWindowMinutes * 60000));
-      }
-      if (maxCount > 0) {
-        contextMessages = contextMessages.slice(-maxCount);
-      }
-
-      const contents = contextMessages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : m.role,
-        parts: [{ text: m.content }]
-      }));
-      contents.push({ role: 'user', parts: [{ text: userInput }] });
-
-      const response = await ai.models.generateContent({
-        model: activeModel,
-        contents: contents as any,
-        config: { 
-          systemInstruction: resolvedSystemPrompt || undefined, 
-          ...engineParams 
-        }
-      });
+      const response = {'text': 'This is a placeholder response from the AI model.'}; // Placeholder response
+      console.log(configs, currentConfigId);
+      // const response = await ai.models.generateContent({
+      //   model: activeModel,
+      //   contents: contents as any,
+      //   config: { 
+      //     systemInstruction: resolvedSystemPrompt || undefined, 
+      //     ...engineParams 
+      //   }
+      // });
 
       setChatMessages(prev => [...prev, { role: 'assistant', content: response.text || 'Empty response', timestamp: Date.now() }]);
     } catch (error: any) {
@@ -250,8 +277,10 @@ const App: React.FC = () => {
             modules={modules} 
             modelParts={modelParts}
             onDragStart={onDragStart} 
-            onUpdateModules={updateModules}
-            onUpdateModelParts={updateParts}
+            onSaveModule={onSaveModule}
+            onDeleteModule={onDeleteModule}
+            onSavePart={onSavePart}
+            onDeletePart={onDeletePart}
           />
         </div>
       </div>
@@ -328,8 +357,10 @@ const App: React.FC = () => {
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">最终生成请求预览 (Request Preview)</span>
           </div>
-          <div className="p-4 max-h-[150px] overflow-y-auto font-mono text-[11px] text-emerald-400/90 bg-slate-950">
+          <div className="p-4 max-h-[250px] overflow-y-auto font-mono text-[11px] text-emerald-400/90 bg-slate-950">
             <pre>{JSON.stringify({ 
+              token: modelParts.find(p => p.id === activeModelParts[ModelPartType.TOKEN])?.value || '',
+              url: modelParts.find(p => p.id === activeModelParts[ModelPartType.URL])?.value || '',
               model: activeModel,
               params: engineParams,
               history: historyStrategy,
