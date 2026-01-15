@@ -48,6 +48,7 @@ export interface WorkspaceConfig {
   };
   historyStrategy: HistoryConfig;
   slotValues: Record<string, any>;
+  resolvedSystemPrompt: string;
   updatedAt: number;
 }
 

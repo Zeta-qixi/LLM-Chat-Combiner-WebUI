@@ -33,7 +33,7 @@ async function http<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const openai_api = {
   chat: async (data) => {
-    return http("/api/chat", {
+    return http("/openai/chat", {
       method: "POST",
       body: data,
     });

@@ -4,7 +4,7 @@ import { Module, ModelPart, ModelPartType, ChatMessage, WorkspaceConfig, History
 import Sidebar from './components/Sidebar';
 import PromptBuilder from './components/PromptBuilder';
 import ChatWindow from './components/ChatWindow';
-import { db } from './services/api';
+import { db, openai_api } from './services/api';
 import { GoogleGenAI } from "@google/genai";
 
 const App: React.FC = () => {
@@ -106,6 +106,7 @@ const App: React.FC = () => {
       engineParams,
       historyStrategy,
       slotValues,
+      resolvedSystemPrompt,
       updatedAt: Date.now()
     };
     
@@ -224,27 +225,13 @@ const App: React.FC = () => {
     const currentHistory = [...chatMessages, newUserMsg];
     setChatMessages(currentHistory);
 
-    const requestData = { 
-      token: modelParts.find(p => p.id === activeModelParts[ModelPartType.TOKEN])?.value || '',
-      url: modelParts.find(p => p.id === activeModelParts[ModelPartType.URL])?.value || '',
-      model: activeModel,
-      params: engineParams,
-      history: historyStrategy,
-      system: resolvedSystemPrompt,
-      historyMessagesIncluded: Math.min(chatMessages.length, historyStrategy.maxCount)
-    };
-
     try {
-      const response = {'text': 'This is a placeholder response from the AI model.'}; // Placeholder response
-      console.log(configs, currentConfigId);
-      // const response = await ai.models.generateContent({
-      //   model: activeModel,
-      //   contents: contents as any,
-      //   config: { 
-      //     systemInstruction: resolvedSystemPrompt || undefined, 
-      //     ...engineParams 
-      //   }
-      // });
+
+      const response = await openai_api.chat(JSON.stringify({
+      currentConfigId,
+      chatMessages,
+      userInput
+    }));
 
       setChatMessages(prev => [...prev, { role: 'assistant', content: response.text || 'Empty response', timestamp: Date.now() }]);
     } catch (error: any) {
