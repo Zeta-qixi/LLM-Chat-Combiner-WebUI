@@ -12,7 +12,8 @@ const App: React.FC = () => {
   const [modelParts, setModelParts] = useState<ModelPart[]>([]);
   const [configs, setConfigs] = useState<WorkspaceConfig[]>([]);
   
-  // Workspace State
+  // UI State
+  const [isChatExpanded, setIsChatExpanded] = useState(true);
   const [currentConfigId, setCurrentConfigId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState('');
   const [activeModuleIds, setActiveModuleIds] = useState<string[]>([]);
@@ -43,7 +44,6 @@ const App: React.FC = () => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success'>('idle');
 
-  
   useEffect(() => {
     const init = async () => {
       const [m, p, c] = await Promise.all([db.modules.list(), db.parts.list(), db.workspaceConfigs.list()]);
@@ -85,7 +85,6 @@ const App: React.FC = () => {
     await db.parts.delete(id);
     const updated = await db.parts.list();
     setModelParts(updated);
-    // Remove from active if deleted
     Object.entries(activeModelParts).forEach(([type, activeId]) => {
       if (activeId === id) {
         setActiveModelParts(prev => ({ ...prev, [type]: null }));
@@ -120,14 +119,11 @@ const App: React.FC = () => {
     setTimeout(() => setSaveStatus('idle'), 2000);
   };
 
-
-
   const loadConfig = (config: WorkspaceConfig) => {
     setCurrentConfigId(config.id);
     setWorkspaceName(config.name);
     setActiveModuleIds(config.activeModuleIds);
     setActiveModelParts(config.activeModelParts);
-    // Fixed: spread defaults to ensure optional WorkspaceConfig properties don't cause type mismatch with required state properties
     setEngineParams({ 
       temperature: 0.7, 
       maxOutputTokens: 2048, 
@@ -138,7 +134,7 @@ const App: React.FC = () => {
       ...(config.engineParams || {})
     });
     setHistoryStrategy(config.historyStrategy || { maxCount: 10, timeWindowMinutes: 0 });
-    setSlotValues(config.slotValues);
+    setSlotValues(config.slotValues || {});
     setIsConfigModalOpen(false);
   };
 
@@ -149,7 +145,6 @@ const App: React.FC = () => {
   };
 
   const handleReset = () => {
-    setWorkspaceName(`Workspace #${configs.length + 1}`);
     setActiveModuleIds([]);
     setSlotValues({});
     setCurrentConfigId(null);
@@ -226,7 +221,6 @@ const App: React.FC = () => {
     setChatMessages(currentHistory);
 
     try {
-
       const response = await openai_api.chat(JSON.stringify({
       currentConfigId,
       chatMessages,
@@ -240,6 +234,7 @@ const App: React.FC = () => {
       setIsProcessing(false);
     }
   };
+
 
   if (isLoading) {
     return (
@@ -272,7 +267,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-slate-950 p-6 space-y-6 overflow-y-auto scrollbar-hide">
+      <div className="flex-1 flex flex-col bg-slate-950 p-6 space-y-6 overflow-y-auto scrollbar-hide transition-all duration-300">
         <div className="flex justify-between items-center bg-slate-900/40 p-4 rounded-2xl border border-slate-800/50">
           <div className="flex items-center gap-4 flex-1">
             <div className="bg-blue-500/10 p-2 rounded-xl border border-blue-500/20">
@@ -344,10 +339,8 @@ const App: React.FC = () => {
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">最终生成请求预览 (Request Preview)</span>
           </div>
-          <div className="p-4 max-h-[250px] overflow-y-auto font-mono text-[11px] text-emerald-400/90 bg-slate-950">
+          <div className="p-4 max-h-[150px] overflow-y-auto font-mono text-[11px] text-emerald-400/90 bg-slate-950">
             <pre>{JSON.stringify({ 
-              token: modelParts.find(p => p.id === activeModelParts[ModelPartType.TOKEN])?.value || '',
-              url: modelParts.find(p => p.id === activeModelParts[ModelPartType.URL])?.value || '',
               model: activeModel,
               params: engineParams,
               history: historyStrategy,
@@ -358,13 +351,31 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      <div className="w-[400px] flex-shrink-0 border-l border-slate-800 bg-slate-900/30">
-        <ChatWindow 
-          messages={chatMessages} 
-          onSend={handleSendMessage} 
-          isProcessing={isProcessing}
-          ready={!!activeModel && activeModelParts[ModelPartType.TOKEN] !== null}
-        />
+      <div className={`relative transition-all duration-300 border-l border-slate-800 bg-slate-900/30 flex-shrink-0 ${isChatExpanded ? 'w-[400px]' : 'w-10'}`}>
+        <button 
+          onClick={() => setIsChatExpanded(!isChatExpanded)}
+          className="absolute left-0 top-1/2 -translate-x-1/2 z-10 w-6 h-12 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-full flex items-center justify-center text-slate-400 transition-colors shadow-lg"
+          title={isChatExpanded ? "收起终端" : "展开终端"}
+        >
+          <i className={`fas ${isChatExpanded ? 'fa-chevron-right' : 'fa-chevron-left'} text-[10px]`}></i>
+        </button>
+        
+        <div className={`h-full flex flex-col ${isChatExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          <ChatWindow 
+            messages={chatMessages} 
+            onSend={handleSendMessage} 
+            onClear={() => setChatMessages([])}
+            isProcessing={isProcessing}
+            ready={!!activeModel && activeModelParts[ModelPartType.TOKEN] !== null}
+          />
+        </div>
+
+        {!isChatExpanded && (
+          <div className="h-full flex flex-col items-center py-8 gap-4 text-slate-600">
+            <i className="fas fa-terminal"></i>
+            <div className="[writing-mode:vertical-rl] text-[10px] font-bold uppercase tracking-widest">Terminal</div>
+          </div>
+        )}
       </div>
 
       {isConfigModalOpen && (
