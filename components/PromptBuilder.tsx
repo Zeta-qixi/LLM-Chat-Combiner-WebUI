@@ -14,6 +14,7 @@ interface BuilderProps {
     topK?: number;
     presencePenalty?: number;
     frequencyPenalty?: number;
+    enabledFields?: string[]; // 追踪哪些字段被启用
   };
   onUpdateParams: (p: any) => void;
   historyStrategy: HistoryConfig;
@@ -34,6 +35,15 @@ const PromptBuilder: React.FC<BuilderProps> = ({
   const [showConfigPanel, setShowConfigPanel] = useState(false);
 
   const getSlots = (text: string) => text.match(/{{(.*?)}}/g)?.map(m => m.slice(2, -2)) || [];
+
+  const toggleField = (field: string) => {
+    const enabledFields = engineParams.enabledFields || [];
+    if (enabledFields.includes(field)) {
+      onUpdateParams({ ...engineParams, enabledFields: enabledFields.filter(f => f !== field) });
+    } else {
+      onUpdateParams({ ...engineParams, enabledFields: [...enabledFields, field] });
+    }
+  };
 
   const renderModelSlot = (type: ModelPartType, label: string, icon: string, color: string) => {
     const partId = activeModelParts[type];
@@ -58,20 +68,32 @@ const PromptBuilder: React.FC<BuilderProps> = ({
     );
   };
 
-  const renderSlider = (label: string, value: number | undefined, min: number, max: number, step: number, field: string) => (
-    <div className="space-y-1">
-      <div className="flex justify-between items-center">
-        <label className="text-[8px] font-bold text-slate-500 uppercase">{label}</label>
-        <span className="text-[9px] font-mono text-indigo-400">{value?.toFixed(field.includes('Penalty') ? 2 : (step < 1 ? 2 : 0))}</span>
+  const renderSlider = (label: string, value: number | undefined, min: number, max: number, step: number, field: string) => {
+    const isEnabled = engineParams.enabledFields?.includes(field);
+    return (
+      <div className={`space-y-1 transition-opacity ${isEnabled ? 'opacity-100' : 'opacity-40'}`}>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <input 
+              type="checkbox" 
+              checked={isEnabled || false} 
+              onChange={() => toggleField(field)}
+              className="w-3 h-3 rounded border-slate-700 bg-slate-950 text-indigo-500 focus:ring-0 focus:ring-offset-0"
+            />
+            <label className="text-[8px] font-bold text-slate-500 uppercase cursor-pointer" onClick={() => toggleField(field)}>{label}</label>
+          </div>
+          {isEnabled && <span className="text-[9px] font-mono text-indigo-400">{value?.toFixed(field.includes('Penalty') ? 2 : (step < 1 ? 2 : 0))}</span>}
+        </div>
+        <input 
+          type="range" min={min} max={max} step={step} 
+          disabled={!isEnabled}
+          value={value ?? 0} 
+          onChange={e => onUpdateParams({...engineParams, [field]: parseFloat(e.target.value)})}
+          className={`w-full h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer ${isEnabled ? 'accent-indigo-500' : 'accent-slate-800'}`}
+        />
       </div>
-      <input 
-        type="range" min={min} max={max} step={step} 
-        value={value ?? 0} 
-        onChange={e => onUpdateParams({...engineParams, [field]: parseFloat(e.target.value)})}
-        className="w-full accent-indigo-500 h-1 bg-slate-950 rounded-lg appearance-none cursor-pointer"
-      />
-    </div>
-  );
+    );
+  };
 
   return (
     <div onDragOver={e => e.preventDefault()} onDrop={onDrop} className="space-y-6">
@@ -141,6 +163,9 @@ const PromptBuilder: React.FC<BuilderProps> = ({
                   />
                 </div>
               </div>
+            </div>
+            <div className="pt-2 border-t border-slate-800">
+               <p className="text-[8px] text-slate-600 italic">* 只有勾选的参数才会被包含在发送给模型的 API 请求中。</p>
             </div>
           </div>
         )}

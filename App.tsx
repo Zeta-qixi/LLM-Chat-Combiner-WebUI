@@ -29,7 +29,8 @@ const App: React.FC = () => {
     topP: 0.95,
     topK: 40,
     presencePenalty: 0.0,
-    frequencyPenalty: 0.0
+    frequencyPenalty: 0.0,
+    enabledFields: ['']
   });
 
   const [historyStrategy, setHistoryStrategy] = useState<HistoryConfig>({
@@ -102,7 +103,7 @@ const App: React.FC = () => {
       name: finalName,
       activeModuleIds,
       activeModelParts,
-      engineParams,
+      engineParams: engineParams as any,
       historyStrategy,
       slotValues,
       resolvedSystemPrompt,
@@ -131,6 +132,7 @@ const App: React.FC = () => {
       topK: 40,
       presencePenalty: 0.0,
       frequencyPenalty: 0.0,
+      enabledFields: [],
       ...(config.engineParams || {})
     });
     setHistoryStrategy(config.historyStrategy || { maxCount: 10, timeWindowMinutes: 0 });
@@ -155,7 +157,8 @@ const App: React.FC = () => {
       topP: 0.95, 
       topK: 40,
       presencePenalty: 0.0,
-      frequencyPenalty: 0.0
+      frequencyPenalty: 0.0,
+      enabledFields:[]
     });
     setHistoryStrategy({ maxCount: 10, timeWindowMinutes: 0 });
   };
@@ -234,6 +237,16 @@ const App: React.FC = () => {
       setIsProcessing(false);
     }
   };
+
+    const currentFilteredParams = useMemo(() => {
+      const filtered: any = { maxOutputTokens: engineParams.maxOutputTokens };
+      if (engineParams.enabledFields) {
+        engineParams.enabledFields.forEach(field => {
+          filtered[field] = (engineParams as any)[field];
+        });
+      }
+      return filtered;
+  }, [engineParams]);
 
 
   if (isLoading) {
@@ -342,7 +355,7 @@ const App: React.FC = () => {
           <div className="p-4 max-h-[150px] overflow-y-auto font-mono text-[11px] text-emerald-400/90 bg-slate-950">
             <pre>{JSON.stringify({ 
               model: activeModel,
-              params: engineParams,
+              params: currentFilteredParams,
               history: historyStrategy,
               system: resolvedSystemPrompt,
               historyMessagesIncluded: Math.min(chatMessages.length, historyStrategy.maxCount)
