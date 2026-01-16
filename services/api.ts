@@ -1,7 +1,7 @@
 
 import { Module, ModelPart, WorkspaceConfig, ModuleType, ModelPartType } from '../types';
 
-const API_BASE = "/api";
+const API_BASE = "/llm-bridge/api";
 
 // Generic HTTP request function
 async function http<T>(url: string, options?: RequestInit): Promise<T> {
@@ -33,7 +33,7 @@ async function http<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const openai_api = {
   chat: async (data) => {
-    return http("/openai/chat", {
+    return http(API_BASE + "/chat", {
       method: "POST",
       body: data,
     });
@@ -43,16 +43,16 @@ export const openai_api = {
 export const db = {
   modules: {
     list: async (): Promise<Module[]> => {
-      return http("/api/modules");
+      return http(API_BASE + "/modules");
     },
     save: async (module: Module) => {
-      return http("/api/modules", {
+      return http(API_BASE + "/modules", {
         method: "POST",
         body: JSON.stringify(module),
       });
     },
     delete: async (id: string) => {
-      await  http(`/api/modules/${id}`, {
+      await  http(API_BASE + `/modules/${id}`, {
         method: "DELETE",
       });
     }
@@ -60,16 +60,16 @@ export const db = {
 
   parts: {
     list: async (): Promise<ModelPart[]> => {
-      return http("/api/parts");
+      return http(API_BASE + "/parts");
     },
     save: async (part: ModelPart) => {
-      return http("/api/parts", {
+      return http(API_BASE + "/parts", {
         method: "POST",
         body: JSON.stringify(part),
       });
     },
     delete: async (id: string) => {
-      await http(`/api/parts/${id}`, {
+      await http(API_BASE + `/parts/${id}`, {
         method: "DELETE",
       });
     }
@@ -77,18 +77,18 @@ export const db = {
 
   workspaceConfigs: {
     list: async (): Promise<WorkspaceConfig[]> => {
-      return http("/api/workspaces");
+      return http(API_BASE + "/workspaces");
     },
 
     save: async (config: WorkspaceConfig) => {
-      return http("/api/workspaces", {
+      return http(API_BASE + "/workspaces", {
         method: "POST",
         body: JSON.stringify(config),
       });
     },
 
     delete: async (id: string) => {
-      return http(`/api/workspaces/${id}`, {
+      return http(API_BASE + `/workspaces/${id}`, {
         method: "DELETE",
       });
     },
